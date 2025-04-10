@@ -1,0 +1,64 @@
+/* ベーシックなリセット */
+html, body {
+    margin: 0;
+    padding: 0;
+    font-family: sans-serif;
+  }
+  
+  /* 長いURLや英数字などを自動的に折り返す指定 */
+  body, p, a, div, span {
+    /* どちらか一方でも良いですが、現行ブラウザでは overflow-wrap が推奨 */
+    overflow-wrap: break-word; 
+    word-wrap: break-word;      /* 互換目的 */
+  }
+  
+  /* 横スクロールを強制的に隠したい場合は以下を有効化
+  html, body {
+    overflow-x: hidden;
+  }
+  */
+  
+  /* 全体の要素をブロックごとに確保 */
+  header, main, footer {
+    padding: 1em;
+  }
+  
+  /* ヘッダー部分の装飾 */
+  header {
+    color: #ffffff;
+    background-color: #e0393a;
+    text-align: center;
+  }
+  
+  /* セクションごとのレイアウト */
+  section {
+    margin: 1em 0;
+    background-color: #dae6eb;
+    padding: 1em;
+  }
+  
+  /* 画像は画面サイズに合わせてアスペクト比を保持しつつ縮小表示 */
+  section img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto; /* 中央寄せする場合 */
+  }
+  
+  /* フッター部分 */
+  footer {
+    background-color: #0097b2;
+    text-align: center;
+    color: #fff; /* フッターを白字にして見やすくする */
+  }
+  
+  /* 幅が広い画面向け (タブレット以上) のレスポンシブ */
+  @media (min-width: 768px) {
+    main {
+      display: flex;
+      gap: 1em;
+    }
+    section {
+      flex: 1;
+    }
+  }
