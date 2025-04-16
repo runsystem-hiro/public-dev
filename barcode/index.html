@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>バーコード連続スキャン</title>
+  <!-- QuaggaJS CDNなどを利用 -->
+  <script src="https://unpkg.com/quagga/dist/quagga.min.js"></script>
+  <style>
+    #interactive {
+      width: 100%;
+      height: auto;
+      position: relative;
+    }
+    #scanner-container {
+      margin-top: 16px;
+    }
+    #scanned-items {
+      margin-top: 16px;
+    }
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>バーコード連続スキャン</h1>
+
+  <!-- 実施日の入力 (タイプが date の入力ボックス) -->
+  <div>
+    <label for="dateInput">実施日:</label>
+    <input type="date" id="dateInput" />
+  </div>
+
+  <!-- バーコードスキャナ画面 -->
+  <div id="scanner-container">
+    <button id="startScanBtn">スキャン開始</button>
+    <button id="stopScanBtn" class="hidden">スキャン停止</button>
+    <div id="interactive" class="viewport hidden"></div>
+  </div>
+
+  <!-- スキャン結果一覧表示 -->
+  <div id="scanned-items">
+    <h2>スキャン結果</h2>
+    <ul id="scannedList"></ul>
+  </div>
+
+  <!-- 終了(確定)ボタン -->
+  <button id="finishBtn" class="hidden">終了 (確定)</button>
+
+  <script>
+    let scannedList = [];           // スキャン結果を保持する配列
+    let selectedDate = "";          // 実施日を保持
+    let isScanning = false;         // スキャン中かどうか
+
+    /**
+     * QuaggaJSの初期化
+     * スキャン開始時に呼び出す
+     */
+    function initQuagga() {
+      Quagga.init({
+        inputStream : {
+          name : "Live",
+          type : "LiveStream",
+          target: document.querySelector('#interactive'),
+          constraints: {
+            facingMode: "environment" // 背面カメラを優先
+          }
+        },
+        decoder : {
+          readers : [
+            "code_128_reader",
+            "ean_reader",
+            "code_39_reader"
+            // 他フォーマットが必要なら追加
+          ]
+        }
+      }, function(err) {
+        if (err) {
+          console.error(err);
+          alert("QuaggaJSを初期化できません: " + err);
+          return;
+        }
+        Quagga.start();
+        console.log("QuaggaJS initialized and started");
+      });
+
+      // バーコードが検出されたときのイベント
+      Quagga.onDetected(onBarcodeDetected);
+    }
+
+    /**
+     * バーコード検出時のコールバック
+     */
+    function onBarcodeDetected(result) {
+      const code = result.codeResult.code;
+      console.log("Detected:", code);
+
+      // 連続スキャンで複数回触れないよう一旦停止(デバウンス)
+      Quagga.pause();
+
+      // 取得データを配列に追加
+      scannedList.push({
+        date: selectedDate,  // 現在の実施日
+        barcode: code
+      });
+
+      // 表示を更新
+      updateScannedList();
+
+      // 少し待ってから再開（バーコードを読み取ったら再度スキャンを続ける）
+      setTimeout(() => {
+        if (isScanning) {
+          Quagga.start();
+        }
+      }, 700);
+    }
+
+    /**
+     * スキャン結果表示の更新
+     */
+    function updateScannedList() {
+      const ul = document.getElementById("scannedList");
+      ul.innerHTML = ""; // 一旦クリア
+      scannedList.forEach(item => {
+        const li = document.createElement("li");
+        li.textContent = `日付: ${item.date} / バーコード: ${item.barcode}`;
+        ul.appendChild(li);
+      });
+    }
+
+    /**
+     * スキャナ開始ボタンを押したとき
+     */
+    function startScanner() {
+      // 日付が未入力ならアラート
+      selectedDate = document.getElementById("dateInput").value;
+      if (!selectedDate) {
+        alert("先に実施日を選択してください");
+        return;
+      }
+
+      // 画面制御
+      isScanning = true;
+      document.getElementById("interactive").classList.remove("hidden");
+      document.getElementById("startScanBtn").classList.add("hidden");
+      document.getElementById("stopScanBtn").classList.remove("hidden");
+      document.getElementById("finishBtn").classList.remove("hidden");
+
+      // Quagga初期化
+      initQuagga();
+    }
+
+    /**
+     * スキャナ停止ボタンを押したとき
+     */
+    function stopScanner() {
+      isScanning = false;
+      Quagga.stop(); // カメラ停止
+      document.getElementById("interactive").classList.add("hidden");
+      document.getElementById("startScanBtn").classList.remove("hidden");
+      document.getElementById("stopScanBtn").classList.add("hidden");
+    }
+
+    /**
+     * 終了(確定)ボタンを押して、まとめてGASに送信
+     */
+    function finishAndSend() {
+      if (!scannedList.length) {
+        alert("スキャンしたバーコードがありません。");
+        return;
+      }
+      // 念のため停止
+      stopScanner();
+
+      const confirmResult = confirm("本当にスキャン結果を送信しますか？");
+      if (!confirmResult) return;
+
+      // JSON化してPOST送信
+      const postData = JSON.stringify(scannedList);
+      const gasUrl = "https://script.google.com/macros/s/AKfycbwWoWxXxSsHi_wbIzVdJiijN8Ki1YjcIiK4j0zQoEISaKwyuHLIjIjYhw6NtSVyAxla/exec";
+
+      fetch(gasUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: postData
+      })
+      .then(response => response.text())
+      .then(text => {
+        console.log("Response from GAS:", text);
+        alert("送信完了: " + text);
+
+        // 送信後に配列をクリア or 続けて再利用するか選択
+        scannedList = [];
+        updateScannedList();
+
+        // ボタン類をリセット
+        document.getElementById("finishBtn").classList.add("hidden");
+      })
+      .catch(err => {
+        console.error(err);
+        alert("送信エラーが発生しました: " + err);
+      });
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("startScanBtn").addEventListener("click", startScanner);
+      document.getElementById("stopScanBtn").addEventListener("click", stopScanner);
+      document.getElementById("finishBtn").addEventListener("click", finishAndSend);
+    });
+  </script>
+</body>
+</html>
